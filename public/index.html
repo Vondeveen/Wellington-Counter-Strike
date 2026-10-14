@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Wellington Counter-Strike: Beehive Siege</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E🐝%3C/text%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="style.css" />
+  <script type="importmap">
+    { "imports": { "three": "/vendor/three/build/three.module.js" } }
+  </script>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="hud" class="hidden">
+    <div id="crosshair"><i></i><i></i><i></i><i></i></div>
+    <div id="hitmarker"></div>
+    <div id="scope"></div>
+    <div id="damageFlash"></div>
+    <div id="dmgIndicators"></div>
+
+    <div id="topbar">
+      <div class="score opp"><span class="tname">OPP</span><span id="scoreOpp">0</span></div>
+      <div id="timerBox"><div id="phase">WARMUP</div><div id="timer">--:--</div></div>
+      <div class="score gov"><span id="scoreGov">0</span><span class="tname">GOV</span></div>
+    </div>
+    <div id="aliveRow"></div>
+
+    <canvas id="radar" width="200" height="200"></canvas>
+    <div id="killfeed"></div>
+    <div id="banner"><div id="bannerTitle"></div><div id="bannerSub"></div></div>
+    <div id="centerMsg"></div>
+    <div id="hint"></div>
+
+    <div id="progress" class="hidden"><div id="progressLabel"></div><div class="bar"><div id="progressFill"></div></div></div>
+
+    <div id="bottomLeft">
+      <div id="hpBox"><span class="icon">✚</span><span id="hp">100</span></div>
+      <div id="teamTag"></div>
+      <div id="carryTag" class="hidden">📜 You carry the Motion</div>
+    </div>
+    <div id="bottomRight">
+      <div id="weaponName">Taranaki AR</div>
+      <div id="ammoBox"><span id="ammo">30</span><span id="reserve">/ 90</span></div>
+      <div id="weaponSlots"></div>
+    </div>
+
+    <div id="chat"><div id="chatLog"></div><input id="chatInput" maxlength="140" placeholder="Say something… (Enter to send, Esc to cancel)" class="hidden" /></div>
+
+    <div id="scoreboard" class="hidden"></div>
+    <div id="spectate" class="hidden"></div>
+  </div>
+
+  <div id="menu">
+    <div class="panel">
+      <h1>WELLINGTON<br /><span>COUNTER-STRIKE</span></h1>
+      <div class="subtitle">Beehive Siege · Parliament Grounds, Te Whanganui-a-Tara</div>
+      <div id="connStatus" class="status">Connecting to server…</div>
+
+      <div id="joinForm">
+        <label>Callsign <input id="nameInput" maxlength="16" placeholder="e.g. Backbencher" /></label>
+        <div class="teams">
+          <button data-team="opp" class="team opp"><b>The Opposition</b><small>Attack · Table the Motion of No Confidence at A or B</small></button>
+          <button data-team="gov" class="team gov"><b>The Government</b><small>Defend · Veto the Motion or hold until time runs out</small></button>
+        </div>
+        <button data-team="auto" class="team auto">Auto-assign</button>
+      </div>
+
+      <div id="pauseForm" class="hidden">
+        <button id="resumeBtn" class="primary">Resume</button>
+        <div class="teams small">
+          <button data-switch="opp" class="team opp"><b>Switch to Opposition</b></button>
+          <button data-switch="gov" class="team gov"><b>Switch to Government</b></button>
+        </div>
+      </div>
+
+      <details class="settings">
+        <summary>Settings</summary>
+        <label>Mouse sensitivity <input id="sens" type="range" min="0.2" max="3" step="0.05" value="1" /><span id="sensVal">1.00</span></label>
+        <label>Volume <input id="vol" type="range" min="0" max="1" step="0.05" value="0.5" /></label>
+        <label class="check"><input id="shadows" type="checkbox" checked /> Shadows (turn off if laggy)</label>
+        <label class="check"><input id="invertY" type="checkbox" /> Invert mouse Y</label>
+      </details>
+
+      <details class="controls" open>
+        <summary>Controls</summary>
+        <div class="grid">
+          <kbd>WASD</kbd><span>Move</span>
+          <kbd>Mouse</kbd><span>Look / Fire</span>
+          <kbd>Right-click</kbd><span>Scope (Longshot)</span>
+          <kbd>Space</kbd><span>Jump</span>
+          <kbd>Shift</kbd><span>Walk (quiet)</span>
+          <kbd>Ctrl / C</kbd><span>Crouch</span>
+          <kbd>R</kbd><span>Reload</span>
+          <kbd>1–4 / Wheel / Q</kbd><span>Weapons</span>
+          <kbd>E (hold)</kbd><span>Table / Veto the Motion</span>
+          <kbd>Tab</kbd><span>Scoreboard</span>
+          <kbd>T / Enter</kbd><span>Chat</span>
+          <kbd>Esc</kbd><span>Menu / switch team</span>
+        </div>
+      </details>
+      <div class="share" id="shareInfo"></div>
+    </div>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
