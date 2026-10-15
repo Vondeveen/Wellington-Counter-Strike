@@ -122,6 +122,24 @@ export const hud = {
     setTimeout(() => a.remove(), 1500);
   },
 
+  // Cartoon blood splats on the screen when you're hurt
+  screenBlood(n = 1) {
+    const box = $('screenBlood');
+    for (let i = 0; i < n; i++) {
+      const d = document.createElement('div');
+      d.className = 'sblood';
+      const size = 80 + Math.random() * 160;
+      const edge = Math.random();
+      const x = edge < 0.5 ? (Math.random() < 0.5 ? -size * 0.3 : window.innerWidth - size * 0.7) : Math.random() * window.innerWidth;
+      const y = edge >= 0.5 ? (Math.random() < 0.5 ? -size * 0.3 : window.innerHeight - size * 0.7) : Math.random() * window.innerHeight;
+      Object.assign(d.style, { width: `${size}px`, height: `${size * (0.8 + Math.random() * 0.4)}px`, left: `${x}px`, top: `${y}px` });
+      box.appendChild(d);
+      setTimeout(() => { d.style.opacity = '0'; d.style.transform = 'translateY(40px)'; }, 600);
+      setTimeout(() => d.remove(), 3300);
+    }
+    while (box.childElementCount > 14) box.firstChild.remove();
+  },
+
   crosshairGap(px) { $('crosshair').style.setProperty('--gap', `${Math.round(px)}px`); },
   crosshairVisible(on) { $('crosshair').style.display = on ? '' : 'none'; },
   scope(on) { $('scope').classList.toggle('on', on); },
@@ -140,7 +158,7 @@ export const hud = {
       const rows = players.filter((p) => p.tm === team).sort((a, b) => b.k - a.k || a.d - b.d);
       return `<div><h3 style="color:${TEAMS[team].color}">${esc(TEAMS[team].name)} (${rows.length})</h3>
         <table><tr><th>Name</th><th>K</th><th>D</th><th>Ping</th></tr>
-        ${rows.map((p) => `<tr class="${p.a ? '' : 'dead'} ${p.id === myId ? 'me' : ''}"><td>${esc(p.n)}${p.a ? '' : ' ☠'}</td><td>${p.k}</td><td>${p.d}</td><td>${p.png}</td></tr>`).join('')}
+        ${rows.map((p) => `<tr class="${p.a ? '' : 'dead'} ${p.id === myId ? 'me' : ''}"><td>${esc(p.n)}${p.bot ? '<span class="botTag">BOT</span>' : ''}${p.a ? '' : ' ☠'}</td><td>${p.k}</td><td>${p.d}</td><td>${p.png}</td></tr>`).join('')}
         </table></div>`;
     };
     sb.innerHTML = col('opp') + col('gov');
@@ -166,8 +184,8 @@ export function createRadar(map) {
   bg.width = bg.height = W;
   const b = bg.getContext('2d');
   b.fillStyle = 'rgba(70,110,60,0.35)';
-  const [gx0, gz0] = P(-54, -44);
-  const [gx1, gz1] = P(52, 48);
+  const [gx0, gz0] = P(-90, -112);
+  const [gx1, gz1] = P(72, 50);
   b.fillRect(gx0, gz0, gx1 - gx0, gz1 - gz0);
   b.fillStyle = 'rgba(200,200,200,0.55)';
   for (const poly of map.radar) {
@@ -195,7 +213,8 @@ export function createRadar(map) {
     b.save();
     b.translate(px, pz);
     if (l.vertical) b.rotate(-Math.PI / 2);
-    b.fillText(l.text, 0, l.vertical ? 0 : 11);
+    if (l.angle) b.rotate(l.angle);
+    b.fillText(l.text, 0, l.vertical || l.angle ? 0 : 11);
     b.restore();
   }
 

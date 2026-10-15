@@ -1,8 +1,10 @@
 import * as THREE from 'three';
-import { TEAMS, ROUND, PLAYER, WEAPONS, WEAPON_ORDER, SITES } from '../shared/config.js';
+import { OutlineEffect } from 'three/addons/effects/OutlineEffect.js';
+import { TEAMS, ROUND, PLAYER, WEAPONS, WEAPON_ORDER, SITES, BOTS } from '../shared/config.js';
 import { buildMap } from './map.js';
 import { stepBody, canStand } from './physics.js';
-import { createPlayerModel } from './models.js';
+import { createPlayerModel, toonMat, makeStump } from './models.js';
+import { createGore } from './gore.js';
 import { hud, createRadar } from './hud.js';
 import { tex } from './textures.js';
 import * as sfx from './audio.js';
@@ -14,7 +16,7 @@ const WEAPON_SPEED = { rifle: 0.95, sniper: 0.85, pistol: 1.0, knife: 1.08 };
 // ---------------------------------------------------------------------------
 // Settings
 // ---------------------------------------------------------------------------
-const settings = { name: '', sens: 1, vol: 0.5, shadows: true, invertY: false };
+const settings = { name: '', sens: 1, vol: 0.5, shadows: true, invertY: false, outlines: true, gore: true };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('wcs-settings') || '{}')); } catch { /* storage unavailable */ }
 function saveSettings() {
   try { localStorage.setItem('wcs-settings', JSON.stringify(settings)); } catch { /* ignore */ }
@@ -32,17 +34,21 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.autoClear = false;
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog('#c3d2dc', 140, 460);
-const sky = new THREE.Mesh(
-  new THREE.SphereGeometry(520, 32, 16),
-  new THREE.MeshBasicMaterial({ map: tex.sky(), side: THREE.BackSide, fog: false, depthWrite: false }),
-);
+scene.fog = new THREE.Fog('#cfe8ff', 170, 520);
+const skyMat = new THREE.MeshBasicMaterial({ map: tex.sky(), side: THREE.BackSide, fog: false, depthWrite: false });
+skyMat.userData.outlineParameters = { visible: false };
+const sky = new THREE.Mesh(new THREE.SphereGeometry(560, 32, 16), skyMat);
 scene.add(sky);
+
+// Cartoon ink outlines
+const outline = new OutlineEffect(renderer, { defaultThickness: 0.006, defaultColor: [0.05, 0.04, 0.06], defaultAlpha: 1 });
+outline.autoClear = false;
 
 // Wellington clouds, blown along by the northerly
 const clouds = [];
 {
-  const cm = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.85, fog: false });
+  const cm = new THREE.MeshBasicMaterial({ color: '#ffffff', fog: false });
+  cm.userData.outlineParameters = { thickness: 0.002, color: [0.55, 0.7, 0.85] };
   for (let i = 0; i < 18; i++) {
     const g = new THREE.Group();
     for (let j = 0; j < 4; j++) {
@@ -57,9 +63,9 @@ const clouds = [];
   }
 }
 
-const hemi = new THREE.HemisphereLight('#e4eeff', '#5a6648', 1.25);
+const hemi = new THREE.HemisphereLight('#eef6ff', '#7a8a5a', 1.6);
 scene.add(hemi);
-const sun = new THREE.DirectionalLight('#fff1d8', 2.3);
+const sun = new THREE.DirectionalLight('#fff4e0', 2.6);
 // Southern hemisphere: the sun sits in the north
 sun.position.set(-50, 110, -80);
 sun.castShadow = true;
@@ -82,8 +88,9 @@ const vmSun = new THREE.DirectionalLight('#ffffff', 1.5);
 vmSun.position.set(1, 2, 1);
 vmScene.add(vmSun);
 
-const map = buildMap(scene);
+const map = buildMap(scene, { merge: !new URLSearchParams(location.search).has('nomerge') });
 const drawRadar = createRadar(map);
+const gore = createGore(scene, map.worldMeshes);
 
 window.addEventListener('resize', () => {
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -102,7 +109,7 @@ const me = {
   weapon: 'rifle', prevWeapon: 'pistol', ammo: {}, reloadUntil: 0, drawUntil: 0, lastShot: 0,
   recoil: 0, scoped: false, action: null, actionSentAt: 0, kick: 0, stepTimer: 0,
 };
-const spec = { x: 20, y: 30, z: 60, yaw: 0.3, pitch: -0.35, follow: null };
+const spec = { x: 62, y: 22, z: -70, yaw: 2.3, pitch: -0.22, follow: null };
 const game = { phase: 'warmup', tl: 0, tlAt: 0, sc: { opp: 0, gov: 0 }, rd: 0, m: null };
 const remotes = new Map();
 let snapPlayers = [];
@@ -166,6 +173,7 @@ function onMessage(msg) {
       showMenu(false);
       $('joinForm').classList.add('hidden');
       $('pauseForm').classList.remove('hidden');
+      if (pendingBots) { send({ t: 'bots', ...pendingBots }); pendingBots = null; }
       break;
     case 'spawn':
       spawn(msg);
@@ -184,6 +192,7 @@ function onMessage(msg) {
       const rx = Math.cos(me.yaw), rz = -Math.sin(me.yaw);
       hud.damage(Math.atan2(dx * rx + dz * rz, dx * fx + dz * fz));
       sfx.playHurt();
+      hud.screenBlood(msg.hp < 40 ? 3 : 1);
       me.pitch += 0.015; // aim punch
       break;
     }
@@ -204,10 +213,33 @@ function onMessage(msg) {
         }
       }
       const r = remotes.get(msg.victim);
-      if (r) r.alive = false;
+      const dir = Array.isArray(msg.d) ? { x: msg.d[0], y: msg.d[1], z: msg.d[2] } : { x: 0, y: 0, z: 0 };
+      const power = msg.weapon === 'sniper' || msg.weapon === 'knife' ? 1.6 : 1;
+      if (r) {
+        r.alive = false;
+        if (settings.gore && r.model.root.visible) gore.explode(r.model, dir, { head: msg.head, power });
+        r.model.root.visible = false;
+      } else if (msg.victim === me.id && settings.gore && Number.isFinite(msg.x)) {
+        gore.explodeAt(me.team, msg.x, msg.y, msg.z, msg.yw || me.yaw, !!msg.c, dir, { head: msg.head, power });
+      }
+      if (msg.victim === me.id) hud.screenBlood(6);
+      break;
+    }
+    case 'bleed': {
+      const point = Array.isArray(msg.p) ? { x: msg.p[0], y: msg.p[1], z: msg.p[2] } : null;
+      const dir = Array.isArray(msg.d) ? { x: msg.d[0], y: msg.d[1], z: msg.d[2] } : { x: 0, y: 0, z: 1 };
+      if (point && msg.from !== me.id && settings.gore) gore.hit(point, dir, msg.head, msg.dmg);
+      const r = remotes.get(msg.id);
+      if (r && msg.hp > 0) loseLimbs(r, msg.hp, dir);
+      if (msg.id === me.id && msg.hp > 0 && msg.hp < 45 && !me.lostArm && settings.gore) {
+        me.lostArm = true;
+        updateViewmodelVisibility();
+        hud.message('Your arm came off!', 'warn', 2000);
+      }
       break;
     }
     case 'round':
+      gore.clear();
       hud.banner(`Round ${msg.round}`, me.team === 'opp' ? 'Table the Motion of No Confidence at A or B' : 'Defend the Debating Chamber (A) and the Beehive (B)', '#fff', 3500);
       break;
     case 'go':
@@ -252,6 +284,13 @@ function addRemote(p) {
   remotes.set(p.id, r);
   return r;
 }
+// Bits fall off as characters get hurt: hat/sunglasses first, then an arm
+function loseLimbs(r, hp, dir) {
+  if (!settings.gore || !r.model.root.visible) return;
+  if (hp < 75 && !r.model.lost.acc) gore.knockOff(r.model, 'acc', dir);
+  if (hp < 45 && !r.model.lost.armL) gore.knockOff(r.model, 'armL', dir);
+}
+
 function removeRemote(r) {
   scene.remove(r.model.root);
   remotes.delete(r.id);
@@ -268,6 +307,8 @@ function onSnap(msg) {
   game.sc = g.sc;
   game.rd = g.rd;
   game.m = g.m;
+  if (g.bf !== undefined && document.activeElement !== botFill) botFill.value = g.bf;
+  if (g.bd && document.activeElement !== botDiff) botDiff.value = g.bd;
   if (prevPhase !== game.phase && game.phase === 'warmup') hud.banner('Warmup', 'Waiting for players on both teams', '#fff', 2500);
   snapPlayers = msg.players;
   const seen = new Set();
@@ -283,8 +324,15 @@ function onSnap(msg) {
     let r = remotes.get(p.id);
     if (r && r.team !== p.tm) { removeRemote(r); r = null; }
     if (!r) r = addRemote(p);
-    if (!r.alive && p.a) r.buf.length = 0; // respawned: don't interpolate across the map
+    if (!r.alive && p.a) {
+      // Respawned: put them back together and don't interpolate across the map
+      r.buf.length = 0;
+      r.model.restore();
+      r.model.root.visible = true;
+    }
     r.alive = !!p.a;
+    r.hp = p.hp;
+    r.bot = !!p.bot;
     r.name = p.n;
     if (r.weapon !== p.w) { r.weapon = p.w; r.model.setWeapon(p.w); }
     r.buf.push({ t: now, x: p.x, y: p.y, z: p.z, yw: p.yw, pt: p.pt, c: p.c });
@@ -329,8 +377,13 @@ function updateRemotes(dt) {
     r.crouch = !!s.c;
     root.position.set(s.x, s.y, s.z);
     root.rotation.y = s.yw;
-    root.visible = spec.follow !== r.id || me.alive;
-    r.model.animate(dt, r.speed, s.pt, r.crouch, r.alive);
+    root.visible = r.alive && (spec.follow !== r.id || me.alive);
+    r.model.animate(dt, r.speed, s.pt, r.crouch);
+    // Stumps drip
+    if (r.alive && r.model.lost.armL && settings.gore && Math.random() < dt * 6) {
+      const sp = r.model.parts.armL.getWorldPosition(tmpV2);
+      gore.drip(sp);
+    }
     r.model.tag.visible = r.alive && r.team === me.team;
     root.updateMatrixWorld(true);
 
@@ -345,6 +398,7 @@ function updateRemotes(dt) {
   }
 }
 
+const tmpV2 = new THREE.Vector3();
 function enemyHitParts() {
   const parts = [];
   for (const r of remotes.values()) {
@@ -358,9 +412,9 @@ function enemyHitParts() {
 // ---------------------------------------------------------------------------
 const motionObj = new THREE.Group();
 {
-  const folder = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.36), new THREE.MeshLambertMaterial({ color: '#b3202a' }));
+  const folder = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.08, 0.36), toonMat('#d01c2c'));
   folder.position.y = 0.05;
-  const paper = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.02, 0.3), new THREE.MeshLambertMaterial({ color: '#f5f0e0' }));
+  const paper = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.02, 0.3), toonMat('#fffaf0'));
   paper.position.y = 0.1;
   const ring = new THREE.Mesh(
     new THREE.RingGeometry(0.6, 0.75, 32),
@@ -368,6 +422,7 @@ const motionObj = new THREE.Group();
   );
   ring.rotation.x = -Math.PI / 2;
   ring.position.y = 0.02;
+  ring.material.userData.outlineParameters = { visible: false };
   const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), new THREE.MeshBasicMaterial({ color: '#ff2222' }));
   lamp.position.set(0.15, 0.16, 0);
   motionObj.add(folder, paper, ring, lamp);
@@ -413,6 +468,7 @@ function addTracer(a, b, color = '#ffe9a0') {
 
 const decalGeo = new THREE.PlaneGeometry(0.12, 0.12);
 const decalMat = new THREE.MeshBasicMaterial({ color: '#1a1a1a', transparent: true, opacity: 0.8, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -4 });
+decalMat.userData.outlineParameters = { visible: false };
 const decals = [];
 let decalIdx = 0;
 for (let i = 0; i < 80; i++) {
@@ -477,22 +533,32 @@ const muzzleFlash = new THREE.Mesh(
   new THREE.PlaneGeometry(0.22, 0.22),
   new THREE.MeshBasicMaterial({ color: '#ffd27a', transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide }),
 );
+muzzleFlash.material.userData.outlineParameters = { visible: false };
 muzzleFlash.visible = false;
 let flashTime = 0;
 function buildViewmodels() {
-  const m = (c, opts = {}) => new THREE.MeshLambertMaterial({ color: c, ...opts });
+  const m = (c, opts = {}) => toonMat(c, opts);
   const bx = (w, h, d, mat, x, y, z) => {
     const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
     mesh.position.set(x, y, z);
     return mesh;
   };
-  const sleeve = (team) => m(team === 'gov' ? '#1f2a38' : '#ff8a2a');
-  const skin = m('#d1a07a');
+  const sleeve = (team) => m(team === 'gov' ? '#22324a' : '#ff8a1e');
+  const skin = m('#e8b48a');
   const arms = (g, team, front = -0.32) => {
     g.add(bx(0.09, 0.09, 0.4, sleeve(team), 0.05, -0.1, 0.2));
     g.add(bx(0.07, 0.07, 0.08, skin, 0.0, -0.06, 0.02));
-    g.add(bx(0.09, 0.09, 0.4, sleeve(team), -0.16, -0.12, front + 0.2));
-    g.add(bx(0.07, 0.07, 0.08, skin, -0.08, -0.06, front));
+    const left = new THREE.Group();
+    left.add(bx(0.09, 0.09, 0.4, sleeve(team), -0.16, -0.12, front + 0.2));
+    left.add(bx(0.07, 0.07, 0.08, skin, -0.08, -0.06, front));
+    const stump = makeStump();
+    stump.scale.setScalar(0.5);
+    stump.rotation.x = Math.PI / 2;
+    stump.position.set(-0.16, -0.12, front + 0.42);
+    stump.visible = false;
+    g.add(left, stump);
+    g.userData.leftArm = left;
+    g.userData.stump = stump;
   };
   for (const team of ['opp', 'gov']) {
     const rifle = new THREE.Group();
@@ -546,6 +612,10 @@ function updateViewmodelVisibility() {
   for (const team of ['opp', 'gov']) {
     for (const [k, g] of Object.entries(vmModels[team])) {
       g.visible = me.alive && team === me.team && k === me.weapon && !me.scoped;
+      if (g.userData.leftArm) {
+        g.userData.leftArm.visible = !me.lostArm;
+        g.userData.stump.visible = !!me.lostArm;
+      }
     }
   }
 }
@@ -569,6 +639,7 @@ function spawn(msg) {
   me.drawUntil = 0;
   me.recoil = 0;
   me.action = null;
+  me.lostArm = false;
   spec.follow = null;
   resetAmmo();
   setScope(false);
@@ -664,8 +735,9 @@ function fire(nowS) {
   if (hit) {
     const ud = hit.object.userData;
     if (ud.playerId) {
-      send({ t: 'hit', target: ud.playerId, w: me.weapon, head: ud.part === 'head' });
-      addPuff(hit.point, 'blood');
+      const head = ud.part === 'head';
+      send({ t: 'hit', target: ud.playerId, w: me.weapon, head, p: [hit.point.x, hit.point.y, hit.point.z].map((v) => +v.toFixed(2)) });
+      if (settings.gore) gore.hit(hit.point, dir, head, w.damage * (head ? w.headMult : 1));
     } else if (!w.melee) addImpact(hit);
   }
   if (!w.melee) addTracer(muzzle, end);
@@ -782,6 +854,10 @@ function updateLocal(dt, nowS) {
     a.reserve -= take;
     me.reloadUntil = 0;
   }
+  // Point the camera before firing so shots use this frame's aim
+  me.pitch = Math.max(-1.55, Math.min(1.55, me.pitch));
+  camera.position.set(b.x, b.y + me.eyeY + bob, b.z);
+  camera.rotation.set(me.pitch, me.yaw, 0);
   if (firing && locked && !chatOpen && game.phase !== 'freeze' && nowS >= me.drawUntil && !me.reloadUntil && !me.action) fire(nowS);
   me.recoil = Math.max(0, me.recoil - dt * (firing ? 0.08 : 0.35));
 
@@ -1053,6 +1129,36 @@ shadows.addEventListener('change', () => {
   scene.traverse((o) => { if (o.material) o.material.needsUpdate = true; });
   saveSettings();
 });
+const outlinesBox = $('outlines');
+outlinesBox.checked = settings.outlines;
+outlinesBox.addEventListener('change', () => { settings.outlines = outlinesBox.checked; saveSettings(); });
+const goreBox = $('goreToggle');
+goreBox.checked = settings.gore;
+goreBox.addEventListener('change', () => {
+  settings.gore = goreBox.checked;
+  if (!settings.gore) gore.clear();
+  saveSettings();
+});
+
+// Bot controls (server-wide)
+const botFill = $('botFill');
+for (let i = 0; i <= BOTS.maxFill; i++) {
+  const o = document.createElement('option');
+  o.value = i;
+  o.textContent = i === 0 ? 'No bots' : `${i} per team`;
+  botFill.appendChild(o);
+}
+botFill.value = BOTS.defaultFill;
+const botDiff = $('botDiff');
+botDiff.value = BOTS.defaultDifficulty;
+let pendingBots = null;
+function sendBots() {
+  pendingBots = { fill: Number(botFill.value), difficulty: botDiff.value };
+  if (me.joined) { send({ t: 'bots', ...pendingBots }); pendingBots = null; }
+}
+botFill.addEventListener('change', sendBots);
+botDiff.addEventListener('change', sendBots);
+
 const invertY = $('invertY');
 invertY.checked = settings.invertY;
 invertY.addEventListener('change', () => { settings.invertY = invertY.checked; saveSettings(); });
@@ -1087,6 +1193,7 @@ function frame() {
   }
   updateMotion(dt, nowS);
   updateEffects(dt);
+  gore.update(dt);
   map.update(nowS);
   for (const c of clouds) {
     c.position.x += dt * 4;
@@ -1110,14 +1217,15 @@ function frame() {
   vmCamera.fov = 65;
   vmCamera.updateProjectionMatrix();
   renderer.clear();
-  renderer.render(scene, camera);
+  outline.enabled = settings.outlines;
+  outline.render(scene, camera);
   renderer.clearDepth();
-  renderer.render(vmScene, vmCamera);
+  outline.render(vmScene, vmCamera);
 }
 
 // Test hook: open the game with ?debug to expose internals in the console
 if (new URLSearchParams(location.search).has('debug')) {
-  window.__wcs = { me, spec, game, remotes, camera, keys, send, setLocked: (v) => { locked = v; }, fire: () => { firing = true; firedThisPress = false; } };
+  window.__wcs = { me, spec, game, remotes, camera, keys, send, onMessage, gore, setLocked: (v) => { locked = v; }, fire: () => { firing = true; firedThisPress = false; } };
 }
 
 hud.setHealth(100);

@@ -7,7 +7,7 @@
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22%3E%3Ctext y=%22.9em%22 font-size=%2290%22%3E🐝%3C/text%3E%3C/svg%3E" />
   <link rel="stylesheet" href="style.css" />
   <script type="importmap">
-    { "imports": { "three": "/vendor/three/build/three.module.js" } }
+    { "imports": { "three": "/vendor/three/build/three.module.js", "three/addons/": "/vendor/three/examples/jsm/" } }
   </script>
 </head>
 <body>
@@ -19,6 +19,7 @@
     <div id="scope"></div>
     <div id="damageFlash"></div>
     <div id="dmgIndicators"></div>
+    <div id="screenBlood"></div>
 
     <div id="topbar">
       <div class="score opp"><span class="tname">OPP</span><span id="scoreOpp">0</span></div>
@@ -75,12 +76,29 @@
         </div>
       </div>
 
+      <div class="bots">
+        <div class="botsTitle">🤖 Bots <small>(shared by everyone on the server)</small></div>
+        <div class="botsRow">
+          <label>Team size <select id="botFill"></select></label>
+          <label>Difficulty
+            <select id="botDiff">
+              <option value="easy">Easy</option>
+              <option value="normal">Normal</option>
+              <option value="hard">Hard</option>
+            </select>
+          </label>
+        </div>
+        <small class="botsHelp">Bots fill each team up to this size. Set 0 for humans only.</small>
+      </div>
+
       <details class="settings">
         <summary>Settings</summary>
         <label>Mouse sensitivity <input id="sens" type="range" min="0.2" max="3" step="0.05" value="1" /><span id="sensVal">1.00</span></label>
         <label>Volume <input id="vol" type="range" min="0" max="1" step="0.05" value="0.5" /></label>
         <label class="check"><input id="shadows" type="checkbox" checked /> Shadows (turn off if laggy)</label>
         <label class="check"><input id="invertY" type="checkbox" /> Invert mouse Y</label>
+        <label class="check"><input id="outlines" type="checkbox" checked /> Cartoon outlines (turn off if laggy)</label>
+        <label class="check"><input id="goreToggle" type="checkbox" checked /> Blood &amp; gore</label>
       </details>
 
       <details class="controls" open>

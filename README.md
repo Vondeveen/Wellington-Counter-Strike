@@ -1,8 +1,17 @@
 # Wellington Counter-Strike: Beehive Siege 🐝
 
 A multiplayer, browser-based, Counter-Strike-style shooter set in and around Parliament
-in Wellington, New Zealand. It covers the Beehive (Executive Wing), Parliament House, the
-Parliamentary Library, the Cenotaph, Lambton Quay, Bowen St and Molesworth St.
+in Wellington, New Zealand. It has cartoon graphics, plenty of cartoon gore, and bots.
+
+The map follows the real layout of the precinct:
+- **The Beehive** at the southern end, by the Cenotaph and Bowen St.
+- **Parliament House** north-west of it, facing east over the front lawn, with the
+  **Parliamentary Library** to its north.
+- **Molesworth St** along the eastern edge of the grounds.
+- **Lambton Quay** running past the Cenotaph corner.
+- **The Old Government Buildings** across Lambton Quay. This is the huge wooden building
+  that now houses Victoria University's law school, and it's where the Opposition spawns.
+- **Bowen House** across Bowen St.
 
 There's nothing to install for players. Everyone opens a web page, and one person runs a
 small Node.js server.
@@ -13,7 +22,7 @@ Two teams play rounds, Counter-Strike defuse style:
 
 | | **The Opposition** (attack) | **The Government** (defend) |
 |---|---|---|
-| Spawn | Lambton Quay, by the main gates | North forecourt, behind Parliament House |
+| Spawn | Forecourt of the Old Government Buildings (Law School) | The link between Parliament House and the Library |
 | Goal | Table the **Motion of No Confidence** at site **A** or **B**, or eliminate the Government | **Veto** the Motion, eliminate the Opposition, or run out the clock |
 
 - **Site A: the Debating Chamber**, inside Parliament House (green benches, the Speaker's chair, the Mace)
@@ -24,6 +33,24 @@ teammate can pick it up by walking over it. Tabling it takes 3 s. After that, th
 Government has 40 s to veto it, which takes 5 s. The first team to win 7 rounds takes
 the match, and a new match then starts automatically. Until both teams have at least one
 player, the game stays in warmup with instant respawns.
+
+### Bots
+Bots top up each team to the size you choose in the menu: 0 to 8 per team, on Easy,
+Normal or Hard. Anyone on the server can change these settings.
+- Bots walk the map using a navigation grid that's generated from the map itself.
+- They take cover, react to gunfire and come looking for whoever shot them.
+- They carry and table the Motion, pick it up when it's dropped, and veto it.
+
+If you're playing alone, just join a team and the bots fill in the rest. Bots only play
+while at least one human is connected.
+
+### Gore
+Shots spray cartoon blood across the floors and walls. As players lose health, their
+hats and sunglasses fly off, then an arm comes off, leaving a dripping stump. Your own
+arm can come off too. A kill bursts the body into flying parts, and a headshot sends the
+head flying. Blood pools spread where bodies land.
+
+You can turn the gore off under **Settings** in the menu.
 
 ### Weapons
 | Key | Weapon | Notes |
@@ -42,6 +69,8 @@ footsteps can be heard, but walking (Shift) is silent.
 `Tab` scoreboard · `T`/`Enter` chat · `Esc` menu (resume or switch team)
 
 When you're dead, click to spectate teammates or right-click for a free camera.
+
+If the game runs slowly, press `Esc`, open **Settings**, and turn off **Cartoon outlines**, then **Shadows**.
 
 ## Running it
 
@@ -88,14 +117,17 @@ Node through your firewall.
 ## Project layout
 
 ```
-server.js              Authoritative game server: rounds, objective, damage, static files
+server.js              Game server: rounds, objective, damage, bots, static files
 public/index.html      Page shell, menu and HUD markup
 public/style.css       HUD and menu styles
 public/shared/config.js  Shared tuning: teams, weapons, sites, spawns, round timers
 public/js/main.js      Client: networking, movement, shooting, spectating, render loop
-public/js/map.js       The Parliament precinct, built from code (geometry and colliders)
+public/js/map.js       The Parliament precinct, built from code. The server builds it too, for the bots
 public/js/physics.js   Player collision against rotated boxes, steps, gravity
-public/js/models.js    Player character models
+public/js/models.js    Cartoon player characters, built from detachable parts
+public/js/gore.js      Blood, splats, gibs and pools
+server/bots.js         Bot AI: seeing, hearing, aiming, objectives
+server/nav.js          Navigation grid and A* pathfinding, generated from the map
 public/js/hud.js       HUD, scoreboard, kill feed and radar
 public/js/textures.js  Procedural canvas textures (no image files)
 public/js/audio.js     Synthesised WebAudio sound effects (no sound files)
@@ -108,7 +140,7 @@ internet connection.
 ### Tweaking
 
 Most of the balance lives in `public/shared/config.js`: weapon damage and fire rate, round
-length, rounds to win, spawn points and site positions. Restart the server after you
+length, rounds to win, spawn points, site positions and bot difficulty. Restart the server after you
 change it.
 
 ### Notes on the netcode

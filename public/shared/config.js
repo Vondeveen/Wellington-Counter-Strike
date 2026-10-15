@@ -60,21 +60,39 @@ export const WEAPON_ORDER = ['rifle', 'sniper', 'pistol', 'knife'];
 
 // Bomb sites. The attackers "table" a Motion of No Confidence; defenders "veto" it.
 export const SITES = {
-  A: { name: 'A — Debating Chamber', x: -21, z: 2, radius: 6.5 },
-  B: { name: 'B — Beehive Lobby', x: 28, z: -24, radius: 13 },
+  A: { name: 'A — Debating Chamber', x: -46, z: -26, radius: 7.5 },
+  B: { name: 'B — Beehive Lobby', x: 0, z: 0, radius: 13 },
 };
 
+// Lambton Quay runs north-east from the Cenotaph corner; the Old Government Buildings
+// (now Victoria University's law school) sit on its far side.
+export const LQ = { x0: 28, z0: 57, x1: 80, z1: 18 };
+export const OGB = { x: 75.6, z: 66.3, rot: 0.6435, length: 80, depth: 30 };
+
+const ux = 0.8, uz = -0.6; // along Lambton Quay
+const nx = 0.6, nz = 0.8; // away from Parliament
 export const SPAWNS = {
-  // Attackers gather on Lambton Quay, south of the main gates
-  opp: [
-    [58, 32], [61, 32], [64, 32], [58, 36], [61, 36], [64, 36],
-    [58, 40], [61, 40], [64, 40], [58, 44], [61, 44], [64, 44],
-  ].map(([x, z]) => ({ x, y: 0, z, yaw: Math.PI / 2 })),
-  // Defenders start behind Parliament House, between it and Bowen St
-  gov: [
-    [-28, -32], [-24, -32], [-20, -32], [-16, -32], [-12, -32], [-8, -32],
-    [-28, -36], [-24, -36], [-20, -36], [-16, -36], [-12, -36], [-8, -36],
-  ].map(([x, z]) => ({ x, y: 0, z, yaw: Math.PI })),
+  // Attackers gather on the forecourt of the Old Government Buildings
+  opp: [-24, -16, -8, 0, 8, 16].flatMap((t) => [21, 25].map((d) => ({
+    x: +(OGB.x - nx * d + ux * t).toFixed(2),
+    y: 0,
+    z: +(OGB.z - nz * d + uz * t).toFixed(2),
+    yaw: OGB.rot,
+  }))),
+  // Defenders start in the link between Parliament House and the Library
+  gov: [-57, -52, -47, -42, -37, -32].flatMap((x) => [-50, -47].map((z) => ({ x, y: 0, z, yaw: Math.PI }))),
 };
 
-export const BOUNDS = { minX: -66, maxX: 68, minZ: -56, maxZ: 58 };
+export const BOUNDS = { minX: -90, maxX: 115, minZ: -112, maxZ: 88 };
+
+export const BOTS = {
+  defaultFill: 3, // bots top each team up to this many players
+  maxFill: 8,
+  defaultDifficulty: 'normal',
+  difficulty: {
+    easy: { react: 0.85, turn: 3.5, error: 0.08, burst: 3, headChance: 0.08, sight: 60 },
+    normal: { react: 0.55, turn: 6, error: 0.05, burst: 4, headChance: 0.18, sight: 85 },
+    hard: { react: 0.25, turn: 12, error: 0.022, burst: 5, headChance: 0.45, sight: 110 },
+  },
+  names: ['Kererū', 'Tūī', 'Weka', 'Pūkeko', 'Kea', 'Takahē', 'Ruru', 'Kākāpō', 'Hoiho', 'Tuatara', 'Pīwakawaka', 'Kōtuku', 'Kiwi', 'Kākā', 'Toroa', 'Pāteke'],
+};

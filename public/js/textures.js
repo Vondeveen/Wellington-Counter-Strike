@@ -2,7 +2,10 @@ import * as THREE from 'three';
 
 // Procedural canvas textures so the game has no external asset dependencies.
 
+const HAS_DOM = typeof document !== 'undefined';
+
 function canvas(w, h, draw) {
+  if (!HAS_DOM) return null; // the server builds the map for collisions only
   const c = document.createElement('canvas');
   c.width = w;
   c.height = h;
@@ -28,11 +31,11 @@ const memo = (key, fn) => cache[key] || (cache[key] = fn());
 
 export const tex = {
   grass: () => memo('grass', () => canvas(256, 256, (g, w, h) => {
-    g.fillStyle = '#4f7f35';
+    g.fillStyle = '#62b842';
     g.fillRect(0, 0, w, h);
-    for (let i = 0; i < 4000; i++) {
+    for (let i = 0; i < 2500; i++) {
       const s = Math.random();
-      g.fillStyle = `rgba(${60 + s * 60},${110 + s * 60},${40 + s * 30},0.5)`;
+      g.fillStyle = `rgba(${80 + s * 60},${170 + s * 50},${50 + s * 30},0.45)`;
       g.fillRect(Math.random() * w, Math.random() * h, 1.5, 3);
     }
     // Faint mowing stripes
@@ -212,21 +215,82 @@ export const tex = {
         g.fill();
       }
     });
-    t.colorSpace = THREE.SRGBColorSpace;
+    return t;
+  }),
+
+  // Old Government Buildings: timber painted to look like stone, tall sash windows
+  ogb: () => memo('ogb', () => canvas(256, 256, (g, w, h) => {
+    g.fillStyle = '#e9dcc0';
+    g.fillRect(0, 0, w, h);
+    // faux-stone rustication lines (it's all wood!)
+    g.strokeStyle = 'rgba(120,100,70,0.25)';
+    for (let y = 0; y < h; y += 16) { g.beginPath(); g.moveTo(0, y); g.lineTo(w, y); g.stroke(); }
+    g.fillStyle = '#cdbb98';
+    g.fillRect(0, 118, w, 10);
+    for (let row = 0; row < 2; row++) {
+      for (let col = 0; col < 2; col++) {
+        const x = 34 + col * 128;
+        const y = 22 + row * 128;
+        g.fillStyle = '#b9a47c';
+        g.fillRect(x - 8, y - 14, 76, 12); // pediment cap
+        g.fillRect(x - 6, y - 4, 64, 92);
+        g.fillStyle = '#28323c';
+        g.fillRect(x, y, 52, 80);
+        g.fillStyle = '#efe6d2';
+        g.fillRect(x + 24, y, 4, 80);
+        g.fillRect(x, y + 38, 52, 4);
+        g.fillStyle = 'rgba(170,210,240,0.35)';
+        g.fillRect(x + 3, y + 3, 18, 32);
+      }
+    }
+  })),
+
+  // Toon shading ramp
+  toonRamp: () => memo('toonRamp', () => {
+    const data = new Uint8Array([90, 90, 90, 255, 175, 175, 175, 255, 255, 255, 255, 255]);
+    const t = new THREE.DataTexture(data, 3, 1, THREE.RGBAFormat);
+    t.minFilter = t.magFilter = THREE.NearestFilter;
+    t.needsUpdate = true;
+    return t;
+  }),
+
+  // Cartoon blood splat (white so it can be tinted)
+  splat: (variant = 0) => memo('splat' + variant, () => {
+    const t = canvas(128, 128, (g, w, h) => {
+      g.clearRect(0, 0, w, h);
+      g.fillStyle = '#fff';
+      const blob = (x, y, r) => { g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill(); };
+      blob(64, 64, 30 + Math.random() * 6);
+      const n = 7 + variant * 2;
+      for (let i = 0; i < n; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const d = 30 + Math.random() * 26;
+        const r = 4 + Math.random() * 9;
+        blob(64 + Math.cos(a) * d, 64 + Math.sin(a) * d, r);
+        // connecting streak
+        g.beginPath();
+        g.moveTo(64 + Math.cos(a - 0.15) * 20, 64 + Math.sin(a - 0.15) * 20);
+        g.lineTo(64 + Math.cos(a) * d, 64 + Math.sin(a) * d);
+        g.lineTo(64 + Math.cos(a + 0.15) * 20, 64 + Math.sin(a + 0.15) * 20);
+        g.fill();
+      }
+      for (let i = 0; i < 10; i++) blob(Math.random() * w, Math.random() * h, 1.5 + Math.random() * 3);
+    });
+    if (t) t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
     return t;
   }),
 
   sky: () => memo('sky', () => {
     const t = canvas(16, 256, (g, w, h) => {
       const grad = g.createLinearGradient(0, 0, 0, h);
-      grad.addColorStop(0, '#3f78c0');
-      grad.addColorStop(0.45, '#8db8e2');
-      grad.addColorStop(0.5, '#d6e4ee');
-      grad.addColorStop(1, '#9aa7b0');
+      grad.addColorStop(0, '#2f8cf0');
+      grad.addColorStop(0.42, '#7cc4ff');
+      grad.addColorStop(0.5, '#d9f0ff');
+      grad.addColorStop(1, '#a8d0a0');
       g.fillStyle = grad;
       g.fillRect(0, 0, w, h);
     });
-    t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+    if (t) t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
     return t;
   }),
 
